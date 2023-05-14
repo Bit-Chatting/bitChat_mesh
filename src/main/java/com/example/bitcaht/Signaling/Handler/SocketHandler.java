@@ -23,7 +23,7 @@ public class SocketHandler extends TextWebSocketHandler {
     //채팅방과 offer 저장
     private Map<String, String> offerMap = new HashMap<>();
 
-    Integer maxUser = 2;
+    Integer maxUser = 3;
 
     @Override
     protected void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception {
@@ -31,23 +31,26 @@ public class SocketHandler extends TextWebSocketHandler {
 
         /**
         let join_room = {
-            event: "join_room",
+            type: "join_room",
             room: "roomName"
         }
-        socketRef.current.emit(JSON.stringify(join_room));
+        socketRef.current.send(JSON.stringify(join_room));
         */
-        SignalType signalType = SignalType.valueOf((String) messageMap.get("event"));
+        SignalType signalType = SignalType.valueOf((String) messageMap.get("type"));
 
-        String roomId = (String) messageMap.get("room");
+        String roomId = (String) messageMap.get("roomName");
         switch (signalType){
             case join_room:
-                //채팅방이 없을 시 생성
-                if(!users.containsKey(roomId)){
-                    users.put(roomId, new CopyOnWriteArrayList<>());
-                }
 
                 //채팅방에 있는 유저 정보
-                List<WebSocketSession> userSessions = users.get(roomId);
+                List<WebSocketSession> userSessions = null;
+                if(!users.containsKey(roomId)){
+                    userSessions = new CopyOnWriteArrayList<>();
+                    users.put(roomId, userSessions);
+                }else {
+                    userSessions = users.get(roomId);
+                }
+
 
                 if(userSessions.size() >= maxUser){
                     session.sendMessage(new TextMessage("room_full"));
@@ -56,7 +59,6 @@ public class SocketHandler extends TextWebSocketHandler {
 
                 //채팅방에 현재 세션 추가
                 userSessions.add(session);
-                session.getAttributes().put("roomId", roomId);
                 List<String> otherUsers = userSessions.stream()
                         .filter(user -> !user.getId().equals(session.getId()))
                         .map(WebSocketSession::getId)
@@ -71,11 +73,11 @@ public class SocketHandler extends TextWebSocketHandler {
 
             /**
             let offer = {
-                event: "offer",
+                type: "offer",
                 sdp: sdp,
                 room: "roomName"
             }
-            socketRef.current.emit(JSON.stringify(join_room));
+            socketRef.current.emit(JSON.stringify(join_room));x`
             */
             case offer:
                 offerMap.put(roomId, session.getId());
