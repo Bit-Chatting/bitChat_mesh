@@ -4,7 +4,6 @@ import com.example.bitcaht.Signaling.model.SignalType;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.log4j.Log4j2;
 import org.springframework.stereotype.Component;
-import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
@@ -30,12 +29,12 @@ public class SocketHandler extends TextWebSocketHandler {
         Map<String, Object> messageMap = new ObjectMapper().readValue(message.getPayload(), Map.class);
 
         /**
-        let join_room = {
-            type: "join_room",
-            room: "roomName"
-        }
-        socketRef.current.send(JSON.stringify(join_room));
-        */
+         let join_room = {
+         type: "join_room",
+         room: "roomName"
+         }
+         socketRef.current.send(JSON.stringify(join_room));
+         */
         SignalType signalType = SignalType.valueOf((String) messageMap.get("type"));
 
         String roomId = (String) messageMap.get("roomName");
@@ -58,6 +57,7 @@ public class SocketHandler extends TextWebSocketHandler {
                 }
 
                 //채팅방에 현재 세션 추가
+                //추후 메세지 타입 통합하여 메소드 통합 예정
                 userSessions.add(session);
                 List<String> otherUsers = userSessions.stream()
                         .filter(user -> !user.getId().equals(session.getId()))
@@ -81,44 +81,15 @@ public class SocketHandler extends TextWebSocketHandler {
             */
             case offer:
                 offerMap.put(roomId, session.getId());
-                //채팅방에 있는 유저 정보
-                userSessions = users.get(roomId);
-                for(WebSocketSession user : userSessions){
-                    if(!user.getId().equals(session.getId())){
-                        //채팅방에 있는 유저들에게 offer 전송
-                        user.sendMessage(new TextMessage(
-                                new ObjectMapper().writeValueAsString(
-                                        Map.of("type", "getOffer", "data", messageMap.get("sdp"))
-                                )
-                        ));
-                    }
-                }
+                sendMessageToRoom(session, roomId,"getOffer", messageMap.get("sdp"));
                 break;
 
             case answer:
-                //채팅방에 있는 유저 정보
-                userSessions = users.get(roomId);
-                for(WebSocketSession user : userSessions){
-                    if(!user.getId().equals(session.getId())){
-                        //채팅방에 있는 유저들에게 offer 전송
-                        user.sendMessage(new TextMessage(
-                                new ObjectMapper().writeValueAsString(
-                                        Map.of("type", "getAnswer", "data", messageMap.get("sdp"))
-                                )
-                        ));
-                    }
-                }
+                sendMessageToRoom(session, roomId,"getAnswer", messageMap.get("sdp"));
                 break;
 
             case candidate:
-                userSessions = users.get(roomId);
-                for (WebSocketSession user : userSessions) {
-                    if (!user.getId().equals(session.getId())) {
-                        user.sendMessage(new TextMessage(
-                                new ObjectMapper().writeValueAsString(
-                                        Map.of("type", "getCandidate", "data", messageMap.get("candidate")))));
-                    }
-                }
+                sendMessageToRoom(session, roomId,"getCandidate", messageMap.get("candidate"));
                 break;
             default:
                 log.info("시그널 타입에러");
@@ -130,5 +101,26 @@ public class SocketHandler extends TextWebSocketHandler {
     @Override
     public void afterConnectionEstablished(WebSocketSession session) throws Exception {
 
+    }
+
+    private void sendMessageToRoom(WebSocketSession session, String roomId, String messageType, Object data) {
+
+        List<WebSocketSession> userSessions = users.get(roomId);
+        try {
+            for (WebSocketSession user : userSessions) {
+
+                if (!user.getId().equals(session.getId())) {
+                    //채팅방에 있는 유저들에게 offer 전송
+                    user.sendMessage(new TextMessage(
+                            new ObjectMapper().writeValueAsString(
+                                    // 보내는 메세지의 type에 대하여 기존에 사용하는 messageType과 동일하게 변경할 수 있는지 확인
+                                    Map.of("type", messageType, "data", data)
+                            )
+                    ));
+                }
+            }
+        } catch (Exception e) {
+            log.error("Fail SendMessage : {}", e.getMessage(), e);
+        }
     }
 }
